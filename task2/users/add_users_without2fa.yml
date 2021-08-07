@@ -1,0 +1,35 @@
+- hosts: all
+  vars:
+    # Users list
+    users:
+    - mikhail.sinelnikov
+    # Groups list
+    grps: sudo,www-data
+    # Shell name
+    shell: /bin/bash
+    # With sudo? yes/no
+    sudo_wo_passwd: yes
+  tasks:
+  - name: Create user accounts and add users to groups
+    user:
+      name: "{{ item }}"
+      groups: "{{ grps }}"
+      shell: "{{ shell }}"
+      createhome: yes
+      home: "/home/{{ item }}"
+    with_items: "{{ users }}"
+  - name: "Add authorized keys"
+    authorized_key:
+      user: "{{ item }}"
+      key: "{{ lookup('file', 'files/'+ item + '.key.pub') }}"
+    with_items: "{{ users }}"
+  - name: Allow developers to sudo without password
+    when: sudo_wo_passwd
+    copy:
+      content: "{{ item }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+      dest: "/etc/sudoers.d/{{ item|replace('.', '_') }}"
+      validate: "visudo -cf %s"
+    with_items: "{{ users }}"
+#  - name: Force user to change password
+#    shell: chage -d 0 {{ item }}
+#    with_items: "{{ users }}"

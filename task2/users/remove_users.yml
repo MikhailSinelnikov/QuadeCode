@@ -1,0 +1,16 @@
+- hosts: all
+  vars:
+    users:
+    - mikhail.sinelnikov
+  tasks:
+  - name: Remove Users
+    user:
+      name: '{{ item }}'
+      state: absent
+      remove: yes
+    with_items: "{{ users }}"
+  - name: Remove sudo for Users
+    file:
+      path: "/etc/sudoers.d/{{ item|replace('.', '_') }}"
+      state: absent
+    with_items: "{{ users }}"

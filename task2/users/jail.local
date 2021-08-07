@@ -1,0 +1,10 @@
+[sshd]
+enabled  = true
+filter   = sshd
+action   = iptables[name=SSH, port=ssh, protocol=tcp]
+#logpath  = /var/log/auth.log
+# I check Ubuntu in to Docker)))
+logpath  = /dev/null
+findtime    = 600
+maxretry    = 3
+bantime     = 43200

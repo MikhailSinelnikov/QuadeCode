@@ -1,0 +1,127 @@
+- hosts: all
+  vars:
+    # Users list
+    users:
+    - mikhail.sinelnikov
+    # Groups list
+    grps: sudo,www-data
+    # Shell name
+    shell: /bin/bash
+    # With sudo? yes/no
+    sudo_wo_passwd: yes
+    # Google auth version
+    google_auth_version: 1.0
+  tasks:
+  - name: Ensure required packages are installed
+    apt: pkg={{ item }} state=present
+    with_items:
+      #- libpam-google-authenticator    wasn't available in wheezy
+      - libpam0g-dev
+      - libqrencode4
+      - libqrencode-dev
+      - libtool
+      - libpam-dev
+      - autoconf
+      - make
+      - git
+  - name: Clone Google authenticator pam module
+    git:
+      repo: "https://github.com/google/google-authenticator-libpam.git"
+      version: master
+      dest: /root/google-authenticator-libpam
+  - name: Build Google authenticator pam module
+    command: ./bootstrap.sh && ./configure --libdir=/lib/x86_64-linux-gnu && make && make install
+    args:
+      chdir: /root/google-authenticator-libpam
+  - name:  Remove dev packages for build
+    apt: pkg={{ item }} state=absent
+    with_items:
+      #- libpam-google-authenticator    wasn't available in wheezy
+      - libpam0g-dev
+      - libqrencode-dev
+      - libtool
+      - libpam-dev
+      - autoconf
+      - make
+      - git
+  - name: Update sshd config
+    lineinfile:
+      dest: /etc/ssh/sshd_config
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    loop:
+      - { regexp: "^ChallengeResponseAuthentication", line: "ChallengeResponseAuthentication yes" }
+      - { regexp: "^UsePAM", line: "UsePAM yes" }
+      - { regexp: "^AuthenticationMethods", line: "AuthenticationMethods publickey,keyboard-interactive" }
+#Disable 2fa
+#      - { regexp: "^AuthenticationMethods", line: "AuthenticationMethods publickey" }
+    notify: restart ssh
+  - name: Add authusers to PAM
+    lineinfile: dest=/etc/pam.d/sshd
+                line="auth sufficient pam_listfile.so item=user sense=allow file=/google-auth/authusers"
+                insertbefore=BOF
+                state=present
+  - name: Setup Google auth check script
+    copy:
+      src: ./google-auth.sh
+      dest: /root/google-auth.sh
+      owner: root
+      group: root
+      mode: u=rwx,g=,o=
+  - name: Execute Google auth check script
+    command: sh /root/google-auth.sh
+  - name: Add Google authenticator to PAM
+    lineinfile: dest=/etc/pam.d/sshd
+                line="auth required pam_google_authenticator.so"
+                insertbefore=BOF
+                state=present
+  - name: Update /etc/pam.d/sshd
+    lineinfile:
+      dest: /etc/pam.d/sshd
+      regexp: "^@include common-auth"
+      line: "#@include common-auth"
+  - name: Setup Google auth check script
+    copy:
+      src: ./google-auth-check.sh
+      dest: /usr/local/bin/google-auth-check.sh
+      owner: root
+      group: root
+      mode: u=rwx,g=rx,o=rx
+  - name: Create user accounts and add users to groups
+    user:
+      name: "{{ item }}"
+      groups: "{{ grps }}"
+      shell: "{{ shell }}"
+      createhome: yes
+      home: "/home/{{ item }}"
+    with_items: "{{ users }}"
+  - name: Add Google auth check script to .bash_profile
+    lineinfile: dest="/home/{{ item }}/.bash_profile"
+                line="sh /usr/local/bin/google-auth-check.sh"
+                insertbefore=EOF
+                create=yes
+                state=present
+    with_items: "{{ users }}"
+  - name: "Add authorized keys"
+    authorized_key:
+      user: "{{ item }}"
+      key: "{{ lookup('file', 'files/'+ item + '.key.pub') }}"
+    with_items: "{{ users }}"
+  - name: Allow developers to sudo without password
+    when: sudo_wo_passwd
+    copy:
+      content: "{{ item }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+      dest: "/etc/sudoers.d/{{ item|replace('.', '_') }}"
+      validate: "visudo -cf %s"
+    with_items: "{{ users }}"
+
+  handlers:
+    - name: restart ssh
+      service:
+        name: ssh
+        state: restarted
+
+#  - name: Generate a timed-based, no reuse, rate-limited (3 logins per 30 seconds) with one concurrently valid code for default user
+#    command: sudo -u {{ item }} /usr/local/bin/google-authenticator -t -f -d -q --label="{{ item }}@ubuntu" --qr-mode=ANSI -r 3 -R 30 -w 1 --secret=/home/{{ item }}/.google_authenticator
+#             creates=/home/{{ item }}/.google_authenticator
+#    with_items: "{{ users }}"

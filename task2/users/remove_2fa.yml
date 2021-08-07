@@ -1,0 +1,11 @@
+- hosts: all
+  vars:
+    # Users list
+    users:
+    - mikhail.sinelnikov
+  tasks:
+  - name: Remove 2fa for user
+    file:
+      path: /home/{{ item }}/.google_authenticator
+      state: absent
+    with_items: "{{ users }}"
