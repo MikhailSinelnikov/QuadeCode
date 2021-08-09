@@ -1,8 +1,6 @@
 WARNING: I execute all playbooks as tests from root user. The root user in production enviroment must be disabled,
 and a user with a different name must be created for deployment.
 
-Briefly, because no time:
-
 In "ansible.cfg" change remote_user to deployment user name.
 
 In "inventory' file add IP addresse deployment hosts.
@@ -75,4 +73,7 @@ Parameters:
 6. remove_users.yml
 Ansible playbook remove users.
 
-No parameters.
+Parameters:
+    # Users list
+    users:
+    - vasya.pupkin
